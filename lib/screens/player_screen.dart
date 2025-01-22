@@ -1,136 +1,156 @@
 import 'package:flutter/material.dart';
 import '../models/audiobook.dart';
-import '../components/chapter_list.dart';
-import '../components/player_controls.dart';
 import '../services/audio_service.dart';
-import 'package:just_audio/just_audio.dart';
+import '../services/chapter_manager.dart';
+import '../components/player_controls.dart';
+import '../utils/duration_formatter.dart';
 
 class PlayerScreen extends StatefulWidget {
   final Audiobook audiobook;
   final AudioService audioService;
-  final VoidCallback onMinimize;
+  final VoidCallback onClose;
 
   const PlayerScreen({
-    super.key,
+    Key? key,
     required this.audiobook,
     required this.audioService,
-    required this.onMinimize,
-  });
+    required this.onClose,
+  }) : super(key: key);
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  bool _isChaptersVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudiobook();
+  }
+
+  Future<void> _initAudiobook() async {
+    await widget.audioService.setAudiobook(widget.audiobook);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.1,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+    return Dismissible(
+      key: const Key('player_screen'),
+      direction: DismissDirection.down,
+      onDismissed: (_) => widget.onClose(),
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down),
+            onPressed: widget.onClose,
           ),
-          child: SingleChildScrollView(
-            controller: scrollController,
-            child: Column(
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                setState(() {
+                  _isChaptersVisible = !_isChaptersVisible;
+                });
+              },
+            ),
+          ],
+        ),
+        body: StreamBuilder<Duration>(
+          stream: widget.audioService.positionStream,
+          builder: (context, snapshot) {
+            final position = snapshot.data ?? Duration.zero;
+            final currentChapter =
+                ChapterManager.getCurrentChapter(widget.audiobook, position);
+
+            return Column(
               children: [
-                // Drag handle
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(2),
+                if (_isChaptersVisible)
+                  Expanded(
+                    child: ChaptersList(
+                      chapters: widget.audiobook.chapters,
+                      audioService: widget.audioService,
+                      currentChapter: currentChapter,
+                    ),
                   ),
-                ),
-
-                // Title bar
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.audiobook.title,
-                              style: Theme.of(context).textTheme.titleLarge,
+                if (!_isChaptersVisible)
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (widget.audiobook.coverImage != null)
+                          Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: AspectRatio(
+                              aspectRatio: 1,
+                              child: Image.memory(
+                                widget.audiobook.coverImage!,
+                                fit: BoxFit.cover,
+                              ),
                             ),
-                            Text(
-                              widget.audiobook.author,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.list),
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            builder: (context) => ChapterList(
-                              chapters: widget.audiobook.chapters,
-                              onChapterSelected: (chapter) {
-                                widget.audioService.seek(chapter.start);
-                                Navigator.pop(context);
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Cover art
-                Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: widget.audiobook.coverImage != null
-                        ? Image.memory(widget.audiobook.coverImage!)
-                        : Container(
-                            color: Colors.grey[800],
-                            child: const Icon(Icons.book, size: 100),
                           ),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(
+                            widget.audiobook.title,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        Text(
+                          widget.audiobook.author,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          currentChapter.title,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-
-                // Player controls
-                StreamBuilder<PlayerState>(
-                  stream: widget.audioService.playerStateStream,
-                  builder: (context, snapshot) {
-                    return StreamBuilder<Duration>(
-                      stream: widget.audioService.positionStream,
-                      builder: (context, positionSnapshot) {
-                        return PlayerControls(
-                          isPlaying: widget.audioService.isPlaying,
-                          position: positionSnapshot.data ?? Duration.zero,
-                          duration: widget.audioService.duration,
-                          onPlayPause: () {
-                            if (widget.audioService.isPlaying) {
-                              widget.audioService.pause();
-                            } else {
-                              widget.audioService.play();
-                            }
-                          },
-                          onSeek: widget.audioService.seek,
-                          onForward: widget.audioService.skipForward,
-                          onRewind: widget.audioService.skipBackward,
-                        );
-                      },
-                    );
-                  },
+                PlayerControls(
+                  audioService: widget.audioService,
+                  audiobook: widget.audiobook,
+                  currentChapter: currentChapter,
                 ),
               ],
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class ChaptersList extends StatelessWidget {
+  final List<Chapter> chapters;
+  final AudioService audioService;
+  final Chapter currentChapter;
+
+  const ChaptersList({
+    Key? key,
+    required this.chapters,
+    required this.audioService,
+    required this.currentChapter,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: chapters.length,
+      itemBuilder: (context, index) {
+        final chapter = chapters[index];
+        return ListTile(
+          title: Text(chapter.title),
+          subtitle: Text(
+            DurationFormatter.format(chapter.end - chapter.start),
           ),
+          selected: chapter.title == currentChapter.title,
+          onTap: () async {
+            await audioService.seek(chapter.start);
+          },
         );
       },
     );
