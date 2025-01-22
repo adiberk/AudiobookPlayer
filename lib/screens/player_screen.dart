@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import '../components/chapter_list.dart';
+import '../components/chapter_selection_dropdown.dart';
 import '../models/audiobook.dart';
 import '../services/audio_service.dart';
 import '../services/chapter_manager.dart';
 import '../components/player_controls.dart';
-import '../utils/duration_formatter.dart';
 
 class PlayerScreen extends StatefulWidget {
   final Audiobook audiobook;
@@ -170,90 +171,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           },
         ),
       ),
-    );
-  }
-}
-
-class ChapterSelectionSheet extends StatelessWidget {
-  final List<Chapter> chapters;
-  final Chapter currentChapter;
-  final Function(Chapter) onChapterSelected;
-
-  const ChapterSelectionSheet({
-    Key? key,
-    required this.chapters,
-    required this.currentChapter,
-    required this.onChapterSelected,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              'Chapters',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: chapters.length,
-              itemBuilder: (context, index) {
-                final chapter = chapters[index];
-                return ListTile(
-                  title: Text(chapter.title),
-                  subtitle: Text(
-                    DurationFormatter.format(chapter.end - chapter.start),
-                  ),
-                  selected: chapter.title == currentChapter.title,
-                  leading: Text('${index + 1}'),
-                  onTap: () => onChapterSelected(chapter),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ChaptersList extends StatelessWidget {
-  final List<Chapter> chapters;
-  final AudioService audioService;
-  final Chapter currentChapter;
-
-  const ChaptersList({
-    Key? key,
-    required this.chapters,
-    required this.audioService,
-    required this.currentChapter,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: chapters.length,
-      itemBuilder: (context, index) {
-        final chapter = chapters[index];
-        return ListTile(
-          title: Text(chapter.title),
-          subtitle: Text(
-            DurationFormatter.format(chapter.end - chapter.start),
-          ),
-          selected: chapter.title == currentChapter.title,
-          leading: Text('${index + 1}'),
-          onTap: () async {
-            await audioService.seek(chapter.start);
-          },
-        );
-      },
     );
   }
 }
