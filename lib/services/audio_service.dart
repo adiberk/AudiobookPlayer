@@ -13,9 +13,14 @@ class AudioService {
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
 
   Future<void> setAudiobook(Audiobook book) async {
-    if (_currentBook?.id != book.id) {
-      _currentBook = book;
-      await _player.setFilePath(book.path);
+    try {
+      if (_currentBook?.id != book.id) {
+        await _player.stop();
+        _currentBook = book;
+        await _player.setFilePath(book.path);
+      }
+    } catch (e) {
+      print('Error setting audiobook: $e');
     }
   }
 
