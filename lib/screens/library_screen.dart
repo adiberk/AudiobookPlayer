@@ -51,6 +51,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  Future<void> _deleteSelectedBooks() async {
+    if (_selectedBooks.isNotEmpty) {
+      final bool confirm = await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Delete Selected Books'),
+              content: Text(
+                  'Are you sure you want to delete ${_selectedBooks.length} selected books?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+
+      if (confirm) {
+        await widget.libraryManager.deleteAudiobooks(_selectedBooks);
+        _toggleSelectionMode();
+      }
+    }
+  }
+
   void _showSortOptions() {
     showModalBottomSheet(
       context: context,
@@ -166,15 +195,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ] else ...[
             IconButton(
               icon: const Icon(Icons.delete),
-              onPressed: _selectedBooks.isEmpty
-                  ? null
-                  : () {
-                      // Delete selected books
-                      for (var id in _selectedBooks) {
-                        widget.libraryManager.deleteAudiobook(id);
-                      }
-                      _toggleSelectionMode();
-                    },
+              onPressed: _selectedBooks.isEmpty ? null : _deleteSelectedBooks,
             ),
           ],
         ],

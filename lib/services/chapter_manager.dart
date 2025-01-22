@@ -1,5 +1,5 @@
 import '../models/audiobook.dart';
-import 'audio_service.dart';
+import '../services/audio_service.dart';
 
 class ChapterManager {
   static Chapter getCurrentChapter(Audiobook audiobook, Duration position) {
@@ -33,6 +33,30 @@ class ChapterManager {
       await audioService.play();
     } else {
       await audioService.pause();
+    }
+  }
+
+  static Future<void> skipToNextChapter(
+    AudioService audioService,
+    Audiobook audiobook,
+    Duration currentPosition,
+  ) async {
+    final currentIndex = getCurrentChapterIndex(audiobook, currentPosition);
+    if (currentIndex < audiobook.chapters.length - 1) {
+      final nextChapter = audiobook.chapters[currentIndex + 1];
+      await audioService.seek(nextChapter.start);
+    }
+  }
+
+  static Future<void> skipToPreviousChapter(
+    AudioService audioService,
+    Audiobook audiobook,
+    Duration currentPosition,
+  ) async {
+    final currentIndex = getCurrentChapterIndex(audiobook, currentPosition);
+    if (currentIndex > 0) {
+      final previousChapter = audiobook.chapters[currentIndex - 1];
+      await audioService.seek(previousChapter.start);
     }
   }
 }

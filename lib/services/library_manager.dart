@@ -40,8 +40,10 @@ class LibraryManager {
     await _loadAudiobooks();
   }
 
-  Future<void> deleteAudiobook(String id) async {
-    await _storageService.deleteAudiobook(id);
+  Future<void> deleteAudiobooks(Set<String> ids) async {
+    for (var id in ids) {
+      await _storageService.deleteAudiobook(id);
+    }
     await _loadAudiobooks();
   }
 

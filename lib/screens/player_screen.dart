@@ -34,6 +34,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await widget.audioService.setAudiobook(widget.audiobook);
   }
 
+  void _showChapterSelection(BuildContext context, Chapter currentChapter) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => ChapterSelectionSheet(
+        chapters: widget.audiobook.chapters,
+        currentChapter: currentChapter,
+        onChapterSelected: (chapter) {
+          widget.audioService.seek(chapter.start);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dismissible(
@@ -63,6 +77,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             final position = snapshot.data ?? Duration.zero;
             final currentChapter =
                 ChapterManager.getCurrentChapter(widget.audiobook, position);
+            final currentIndex = ChapterManager.getCurrentChapterIndex(
+                widget.audiobook, position);
 
             return Column(
               children: [
@@ -103,9 +119,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          currentChapter.title,
-                          style: Theme.of(context).textTheme.titleSmall,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.skip_previous),
+                              onPressed: currentIndex > 0
+                                  ? () => ChapterManager.skipToPreviousChapter(
+                                      widget.audioService,
+                                      widget.audiobook,
+                                      position)
+                                  : null,
+                            ),
+                            GestureDetector(
+                              onTap: () => _showChapterSelection(
+                                  context, currentChapter),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    currentChapter.title,
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                  const Icon(Icons.arrow_drop_down),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.skip_next),
+                              onPressed: currentIndex <
+                                      widget.audiobook.chapters.length - 1
+                                  ? () => ChapterManager.skipToNextChapter(
+                                      widget.audioService,
+                                      widget.audiobook,
+                                      position)
+                                  : null,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -119,6 +169,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class ChapterSelectionSheet extends StatelessWidget {
+  final List<Chapter> chapters;
+  final Chapter currentChapter;
+  final Function(Chapter) onChapterSelected;
+
+  const ChapterSelectionSheet({
+    Key? key,
+    required this.chapters,
+    required this.currentChapter,
+    required this.onChapterSelected,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Chapters',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: chapters.length,
+              itemBuilder: (context, index) {
+                final chapter = chapters[index];
+                return ListTile(
+                  title: Text(chapter.title),
+                  subtitle: Text(
+                    DurationFormatter.format(chapter.end - chapter.start),
+                  ),
+                  selected: chapter.title == currentChapter.title,
+                  leading: Text('${index + 1}'),
+                  onTap: () => onChapterSelected(chapter),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -148,6 +248,7 @@ class ChaptersList extends StatelessWidget {
             DurationFormatter.format(chapter.end - chapter.start),
           ),
           selected: chapter.title == currentChapter.title,
+          leading: Text('${index + 1}'),
           onTap: () async {
             await audioService.seek(chapter.start);
           },
