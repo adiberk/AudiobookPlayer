@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/audiobook.dart';
 import '../services/audio_service.dart';
-import '../services/chapter_manager.dart';
 import '../utils/duration_formatter.dart';
 
 class PlayerControls extends StatelessWidget {
@@ -79,7 +78,7 @@ class PlayerControls extends StatelessWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.replay_30),
-              onPressed: () => audioService.skipBackward(),
+              onPressed: () => audioService.skipToPrevious(),
             ),
             StreamBuilder<PlayerState>(
               stream: audioService.playerStateStream,

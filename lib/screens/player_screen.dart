@@ -49,7 +49,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (widget.audiobook.isJoinedVolume) {
             await widget.audioService.seekToChapter(chapterIndex);
           } else {
-            await widget.audioService.seek(chapter.start);
+            await widget.audioService
+                .seek(chapter.start + Duration(milliseconds: 1));
+            widget.audioService.updateCurrentChapter(
+                widget.audiobook.chapters.indexOf(chapter));
+            widget.audiobook.currentChapterIndex =
+                widget.audiobook.chapters.indexOf(chapter);
           }
           setState(() {
             _currentChapter = chapter;
@@ -91,8 +96,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // Listen for chapter changes
             if (widget.audiobook.isJoinedVolume) {
               widget.audioService.currentIndexStream.listen((index) {
-                if (index != null &&
-                    index != widget.audiobook.currentChapterIndex) {
+                if (index != null) {
                   setState(() {
                     _currentChapter = widget.audiobook.chapters[index];
                   });

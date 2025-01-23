@@ -47,9 +47,12 @@ class ChapterManager {
       if (currentIndex < audiobook.chapters.length - 1) {
         // Instead of seeking to the end, directly seek to the start of next chapter
         final nextChapter = audiobook.chapters[currentIndex + 1];
-        await audioService.seek(nextChapter.start);
+        await audioService.seek(nextChapter.start + Duration(milliseconds: 1));
         // Update the current chapter index in the audiobook
         await audioService.updateCurrentChapter(currentIndex + 1);
+        final nextIndex = getCurrentChapterIndex(
+            audiobook, nextChapter.start + Duration(milliseconds: 1));
+        audiobook.currentChapterIndex = nextIndex;
       }
     }
   }
@@ -63,14 +66,19 @@ class ChapterManager {
       final currentIndex = audioService.currentIndex;
       if (currentIndex > 0) {
         await audioService.seekToChapter(currentIndex - 1);
+        await audioService.updateCurrentChapter(currentIndex - 1);
       }
     } else {
       final currentIndex = getCurrentChapterIndex(audiobook, currentPosition);
       if (currentIndex > 0) {
         final previousChapter = audiobook.chapters[currentIndex - 1];
-        await audioService.seek(previousChapter.start);
+        await audioService
+            .seek(previousChapter.start + Duration(milliseconds: 1));
         // Update the current chapter index in the audiobook
         await audioService.updateCurrentChapter(currentIndex - 1);
+        final nextIndex = getCurrentChapterIndex(
+            audiobook, previousChapter.start + Duration(milliseconds: 1));
+        audiobook.currentChapterIndex = nextIndex;
       }
     }
   }
