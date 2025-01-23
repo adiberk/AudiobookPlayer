@@ -24,11 +24,14 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   bool _isChaptersVisible = false;
+  late Chapter _currentChapter;
 
   @override
   void initState() {
     super.initState();
     _initAudiobook();
+    _currentChapter =
+        widget.audiobook.chapters[widget.audiobook.currentChapterIndex];
   }
 
   Future<void> _initAudiobook() async {
@@ -41,8 +44,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       builder: (context) => ChapterSelectionSheet(
         chapters: widget.audiobook.chapters,
         currentChapter: currentChapter,
-        onChapterSelected: (chapter) {
-          widget.audioService.seek(chapter.start);
+        onChapterSelected: (chapter) async {
+          final chapterIndex = widget.audiobook.chapters.indexOf(chapter);
+          if (widget.audiobook.isJoinedVolume) {
+            await widget.audioService.seekToChapter(chapterIndex);
+          } else {
+            await widget.audioService.seek(chapter.start);
+          }
+          setState(() {
+            _currentChapter = chapter;
+          });
           Navigator.pop(context);
         },
       ),
@@ -76,10 +87,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           stream: widget.audioService.positionStream,
           builder: (context, snapshot) {
             final position = snapshot.data ?? Duration.zero;
-            final currentChapter =
-                ChapterManager.getCurrentChapter(widget.audiobook, position);
-            final currentIndex = ChapterManager.getCurrentChapterIndex(
-                widget.audiobook, position);
+
+            // Listen for chapter changes
+            if (widget.audiobook.isJoinedVolume) {
+              widget.audioService.currentIndexStream.listen((index) {
+                if (index != null &&
+                    index != widget.audiobook.currentChapterIndex) {
+                  setState(() {
+                    _currentChapter = widget.audiobook.chapters[index];
+                  });
+                }
+              });
+            } else {
+              _currentChapter =
+                  ChapterManager.getCurrentChapter(widget.audiobook, position);
+            }
 
             return Column(
               children: [
@@ -88,89 +110,100 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     child: ChaptersList(
                       chapters: widget.audiobook.chapters,
                       audioService: widget.audioService,
-                      currentChapter: currentChapter,
+                      currentChapter: _currentChapter,
                     ),
                   ),
-                if (!_isChaptersVisible)
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.audiobook.coverImage != null)
-                          Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: AspectRatio(
-                              aspectRatio: 1,
-                              child: Image.memory(
-                                widget.audiobook.coverImage!,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Text(
-                            widget.audiobook.title,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        Text(
-                          widget.audiobook.author,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.skip_previous),
-                              onPressed: currentIndex > 0
-                                  ? () => ChapterManager.skipToPreviousChapter(
-                                      widget.audioService,
-                                      widget.audiobook,
-                                      position)
-                                  : null,
-                            ),
-                            GestureDetector(
-                              onTap: () => _showChapterSelection(
-                                  context, currentChapter),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    currentChapter.title,
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall,
-                                  ),
-                                  const Icon(Icons.arrow_drop_down),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.skip_next),
-                              onPressed: currentIndex <
-                                      widget.audiobook.chapters.length - 1
-                                  ? () => ChapterManager.skipToNextChapter(
-                                      widget.audioService,
-                                      widget.audiobook,
-                                      position)
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                if (!_isChaptersVisible) _buildMainContent(context),
                 PlayerControls(
                   audioService: widget.audioService,
                   audiobook: widget.audiobook,
-                  currentChapter: currentChapter,
+                  currentChapter: _currentChapter,
                 ),
               ],
             );
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildMainContent(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (widget.audiobook.coverImage != null)
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: Image.memory(
+                  widget.audiobook.coverImage!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              widget.audiobook.title,
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Text(
+            widget.audiobook.author,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          _buildChapterControls(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChapterControls(BuildContext context) {
+    return StreamBuilder<int?>(
+      stream: widget.audioService.currentIndexStream,
+      builder: (context, snapshot) {
+        final currentIndex = widget.audiobook.isJoinedVolume
+            ? (snapshot.data ?? widget.audiobook.currentChapterIndex)
+            : widget.audiobook.currentChapterIndex;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.skip_previous),
+              onPressed: currentIndex > 0
+                  ? () => ChapterManager.skipToPreviousChapter(
+                      widget.audioService,
+                      widget.audiobook,
+                      widget.audioService.position)
+                  : null,
+            ),
+            GestureDetector(
+              onTap: () => _showChapterSelection(context, _currentChapter),
+              child: Row(
+                children: [
+                  Text(
+                    _currentChapter.title,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_next),
+              onPressed: currentIndex < widget.audiobook.chapters.length - 1
+                  ? () => ChapterManager.skipToNextChapter(widget.audioService,
+                      widget.audiobook, widget.audioService.position)
+                  : null,
+            ),
+          ],
+        );
+      },
     );
   }
 }

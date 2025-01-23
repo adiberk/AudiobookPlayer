@@ -28,16 +28,25 @@ class LibraryManager {
   }
 
   Future<void> importFolder() async {
-    final importedBooks = await _importService.importFolder();
-    for (var book in importedBooks) {
-      await _storageService.addAudiobook(book);
+    final importedBook = await _importService.importFolder();
+    if (importedBook != null) {
+      await _storageService.addAudiobook(importedBook);
+      await _loadAudiobooks();
     }
-    await _loadAudiobooks();
   }
 
   Future<void> updateAudiobook(Audiobook audiobook) async {
     await _storageService.updateAudiobook(audiobook);
     await _loadAudiobooks();
+  }
+
+  Future<void> toggleJoinedVolume(String audiobookId, bool joined) async {
+    final audiobooks = await _storageService.loadAudiobooks();
+    final index = audiobooks.indexWhere((book) => book.id == audiobookId);
+    if (index != -1) {
+      final updatedBook = audiobooks[index].copyWith(isJoinedVolume: joined);
+      await updateAudiobook(updatedBook);
+    }
   }
 
   Future<void> deleteAudiobooks(Set<String> ids) async {

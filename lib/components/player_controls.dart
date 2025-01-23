@@ -26,16 +26,23 @@ class PlayerControls extends StatelessWidget {
           stream: audioService.positionStream,
           builder: (context, snapshot) {
             final position = snapshot.data ?? Duration.zero;
-            final chapterPosition = position - currentChapter.start;
-            final chapterDuration = currentChapter.end - currentChapter.start;
+            Duration chapterPosition;
+            Duration chapterDuration;
 
-            // Check if chapter has ended
-            if (position >= currentChapter.end) {
-              final currentIndex =
-                  ChapterManager.getCurrentChapterIndex(audiobook, position);
-              ChapterManager.handleChapterEnd(
-                  audioService, audiobook, currentIndex);
+            if (audiobook.isJoinedVolume) {
+              // For joined volumes, we use the actual position from the current file
+              chapterPosition = position;
+              chapterDuration = currentChapter.end - currentChapter.start;
+            } else {
+              // For single files, we calculate relative to chapter start
+              chapterPosition = position - currentChapter.start;
+              chapterDuration = currentChapter.end - currentChapter.start;
             }
+
+            // Ensure position is within bounds
+            chapterPosition = Duration(
+                milliseconds: chapterPosition.inMilliseconds
+                    .clamp(0, chapterDuration.inMilliseconds));
 
             return Column(
               children: [
@@ -51,11 +58,16 @@ class PlayerControls extends StatelessWidget {
                 ),
                 Slider(
                   value: chapterPosition.inSeconds.toDouble(),
+                  min: 0,
                   max: chapterDuration.inSeconds.toDouble(),
                   onChanged: (value) {
-                    audioService.seek(
-                      currentChapter.start + Duration(seconds: value.toInt()),
-                    );
+                    if (audiobook.isJoinedVolume) {
+                      audioService.seek(Duration(seconds: value.toInt()));
+                    } else {
+                      audioService.seek(
+                        currentChapter.start + Duration(seconds: value.toInt()),
+                      );
+                    }
                   },
                 ),
               ],

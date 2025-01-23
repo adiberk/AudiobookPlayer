@@ -5,6 +5,7 @@ import '../components/mini_player.dart';
 import '../screens/player_screen.dart';
 import '../services/library_manager.dart';
 import '../services/audio_service.dart';
+import '../utils/duration_formatter.dart';
 
 class LibraryScreen extends StatefulWidget {
   final LibraryManager libraryManager;
@@ -30,6 +31,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void dispose() {
     _audioService.dispose();
     super.dispose();
+  }
+
+  void _playSubfolderFile(Audiobook folderBook, Chapter chapter) {
+    final singleFileBook = Audiobook(
+      title: chapter.title,
+      author: folderBook.author,
+      duration: DurationFormatter.format(chapter.end - chapter.start),
+      path: chapter.filePath!,
+      coverImage: folderBook.coverImage,
+      chapters: [
+        Chapter(
+          title: chapter.title,
+          start: Duration.zero,
+          end: chapter.end - chapter.start,
+          filePath: chapter.filePath,
+        )
+      ],
+    );
+
+    setState(() {
+      _currentAudiobook = singleFileBook;
+      _isPlayerVisible = true;
+    });
+
+    _showPlayerScreen(context);
   }
 
   void _toggleSelectionMode() {
@@ -254,15 +280,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           audiobook: audiobook,
                           isSelected: _selectedBooks.contains(audiobook.id),
                           selectionMode: _isSelectionMode,
+                          libraryManager: widget.libraryManager,
+                          audioService: _audioService,
                           onTap: () {
                             if (_isSelectionMode) {
                               _toggleBookSelection(audiobook.id);
                             } else {
-                              setState(() {
-                                _currentAudiobook = audiobook;
-                                _isPlayerVisible = true;
-                              });
-                              _showPlayerScreen(context);
+                              if (!(audiobook.isFolder &&
+                                  !audiobook.isJoinedVolume)) {
+                                setState(() {
+                                  _currentAudiobook = audiobook;
+                                  _isPlayerVisible = true;
+                                });
+                                _showPlayerScreen(context);
+                              }
                             }
                           },
                           onLongPress: () {

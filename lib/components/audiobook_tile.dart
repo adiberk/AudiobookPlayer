@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/audiobook.dart';
+import '../screens/folder_contents_screen.dart';
+import '../services/audio_service.dart';
+import '../services/library_manager.dart';
 
 class AudiobookTile extends StatelessWidget {
   final Audiobook audiobook;
@@ -7,20 +10,105 @@ class AudiobookTile extends StatelessWidget {
   final VoidCallback onLongPress;
   final bool isSelected;
   final bool selectionMode;
+  final LibraryManager libraryManager;
+  final AudioService audioService;
 
   const AudiobookTile({
     Key? key,
     required this.audiobook,
     required this.onTap,
     required this.onLongPress,
+    required this.libraryManager,
+    required this.audioService,
     this.isSelected = false,
     this.selectionMode = false,
   }) : super(key: key);
 
+  void _showOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (audiobook.isFolder && !audiobook.isJoinedVolume)
+                ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: const Text('Join as Single Volume'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final updatedBook =
+                        audiobook.copyWith(isJoinedVolume: true);
+                    await libraryManager.updateAudiobook(updatedBook);
+                  },
+                ),
+              if (audiobook.isFolder && audiobook.isJoinedVolume)
+                ListTile(
+                  leading: const Icon(Icons.playlist_remove),
+                  title: const Text('Unjoin Volume'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final updatedBook =
+                        audiobook.copyWith(isJoinedVolume: false);
+                    await libraryManager.updateAudiobook(updatedBook);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Delete'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Audiobook'),
+                      content: const Text(
+                          'Are you sure you want to delete this audiobook?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await libraryManager.deleteAudiobooks({audiobook.id});
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        if (audiobook.isFolder && !audiobook.isJoinedVolume) {
+          // Navigate to folder contents
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FolderContentsScreen(
+                folderBook: audiobook,
+                audioService: audioService,
+                libraryManager: libraryManager,
+              ),
+            ),
+          );
+        } else {
+          onTap();
+        }
+      },
       onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
@@ -57,7 +145,10 @@ class AudiobookTile extends StatelessWidget {
                           color: Colors.grey[700],
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Icon(Icons.book, color: Colors.white),
+                        child: Icon(
+                          audiobook.isFolder ? Icons.folder : Icons.book,
+                          color: Colors.white,
+                        ),
                       ),
                     if (selectionMode)
                       Positioned.fill(
@@ -108,12 +199,28 @@ class AudiobookTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      audiobook.duration,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[400],
-                            fontSize: 14,
+                    Row(
+                      children: [
+                        Text(
+                          audiobook.duration,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey[400],
+                                    fontSize: 14,
+                                  ),
+                        ),
+                        if (audiobook.isFolder)
+                          Text(
+                            ' • ${audiobook.chapters.length} files',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.grey[400],
+                                  fontSize: 14,
+                                ),
                           ),
+                      ],
                     ),
                   ],
                 ),
@@ -126,9 +233,7 @@ class AudiobookTile extends StatelessWidget {
                     color: Colors.grey[400],
                     size: 20,
                   ),
-                  onPressed: () {
-                    // TODO: Show options menu
-                  },
+                  onPressed: () => _showOptions(context),
                 )
               else
                 Checkbox(

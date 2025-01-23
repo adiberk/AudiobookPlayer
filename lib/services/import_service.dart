@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import '../models/audiobook.dart';
+import '../utils/duration_formatter.dart';
 import 'metadata_service.dart';
 
 class ImportService {
@@ -50,41 +52,79 @@ class ImportService {
     return [];
   }
 
-  Future<List<Audiobook>> importFolder() async {
+  Future<Audiobook?> importFolder() async {
     try {
       String? folderPath = await FilePicker.platform.getDirectoryPath();
 
       if (folderPath != null) {
         final directory = Directory(folderPath);
-        List<Audiobook> importedBooks = [];
+        List<Chapter> folderChapters = [];
+        Uint8List? firstCoverImage;
+        Duration totalDuration = Duration.zero;
 
-        await for (var entity in directory.list(recursive: false)) {
+        // Get all audio files in the folder
+        List<FileSystemEntity> files = directory
+            .listSync()
+            .where((entity) =>
+                entity is File &&
+                _supportedFormats.contains(
+                    path.extension(entity.path).toLowerCase().substring(1)))
+            .toList();
+
+        // Sort files by name to maintain order
+        files.sort((a, b) => a.path.compareTo(b.path));
+
+        for (var entity in files) {
           if (entity is File) {
-            String extension = path.extension(entity.path).toLowerCase();
-            if (_supportedFormats.contains(extension.replaceAll('.', ''))) {
-              final metadata =
-                  await MetadataService.extractMetadata(entity.path);
+            final metadata = await MetadataService.extractMetadata(entity.path);
 
-              final audiobook = Audiobook(
-                title: metadata['title'] ?? path.basename(entity.path),
-                author: metadata['author'] ?? 'Unknown Author',
-                duration: metadata['duration']?['formatted'] ?? '00:00:00',
-                path: entity.path,
-                coverImage: metadata['cover_photo'],
-                chapters: (metadata['chapters'] as List<Chapter>?) ?? [],
-              );
-
-              importedBooks.add(audiobook);
+            // Store first found cover image
+            if (firstCoverImage == null && metadata['cover_photo'] != null) {
+              firstCoverImage = metadata['cover_photo'];
             }
+
+            // Calculate duration
+            Duration fileDuration = Duration(
+                seconds: (metadata['duration']?['seconds'] ?? 0.0).round());
+
+            // Create chapter from file
+            Chapter chapter = Chapter(
+              title: metadata['title'] ?? path.basename(entity.path),
+              start: totalDuration,
+              end: totalDuration + fileDuration,
+              filePath: entity.path,
+            );
+
+            folderChapters.add(chapter);
+            totalDuration += fileDuration;
           }
         }
 
-        return importedBooks;
+        if (folderChapters.isNotEmpty) {
+          return Audiobook(
+            title: path.basename(folderPath),
+            author: 'Various Artists',
+            duration: DurationFormatter.format(totalDuration),
+            path: folderPath,
+            coverImage: firstCoverImage,
+            chapters: folderChapters,
+            isFolder: true,
+            isJoinedVolume: false,
+          );
+        }
       }
     } catch (e) {
       print('Error importing folder: $e');
     }
 
-    return [];
+    return null;
+  }
+
+  Future<Audiobook> convertToJoinedVolume(Audiobook folderBook) async {
+    if (!folderBook.isFolder) return folderBook;
+
+    return folderBook.copyWith(
+      isJoinedVolume: true,
+    );
   }
 }
