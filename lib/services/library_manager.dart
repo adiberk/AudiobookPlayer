@@ -1,10 +1,10 @@
 import 'dart:async';
 import '../models/audiobook.dart';
-import 'storage_service.dart';
+import 'hive_storage_service.dart';
 import 'import_service.dart';
 
 class LibraryManager {
-  final StorageService _storageService = StorageService();
+  final HiveStorageService _storageService = HiveStorageService();
   final ImportService _importService = ImportService();
 
   final _audiobooksController = StreamController<List<Audiobook>>.broadcast();

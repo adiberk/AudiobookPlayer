@@ -1,30 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/audiobook.dart';
 import '../screens/folder_contents_screen.dart';
-import '../services/audio_service.dart';
-import '../services/library_manager.dart';
+import '../providers/providers.dart';
 
-class AudiobookTile extends StatelessWidget {
+class AudiobookTile extends ConsumerWidget {
   final Audiobook audiobook;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final bool isSelected;
   final bool selectionMode;
-  final LibraryManager libraryManager;
-  final AudioService audioService;
 
   const AudiobookTile({
     Key? key,
     required this.audiobook,
     required this.onTap,
     required this.onLongPress,
-    required this.libraryManager,
-    required this.audioService,
     this.isSelected = false,
     this.selectionMode = false,
   }) : super(key: key);
 
-  void _showOptions(BuildContext context) {
+  void _showOptions(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -40,7 +36,9 @@ class AudiobookTile extends StatelessWidget {
                     Navigator.pop(context);
                     final updatedBook =
                         audiobook.copyWith(isJoinedVolume: true);
-                    await libraryManager.updateAudiobook(updatedBook);
+                    await ref
+                        .read(audiobooksProvider.notifier)
+                        .updateAudiobook(updatedBook);
                   },
                 ),
               if (audiobook.isFolder && audiobook.isJoinedVolume)
@@ -51,7 +49,9 @@ class AudiobookTile extends StatelessWidget {
                     Navigator.pop(context);
                     final updatedBook =
                         audiobook.copyWith(isJoinedVolume: false);
-                    await libraryManager.updateAudiobook(updatedBook);
+                    await ref
+                        .read(audiobooksProvider.notifier)
+                        .updateAudiobook(updatedBook);
                   },
                 ),
               ListTile(
@@ -78,7 +78,9 @@ class AudiobookTile extends StatelessWidget {
                     ),
                   );
                   if (confirmed == true) {
-                    await libraryManager.deleteAudiobooks({audiobook.id});
+                    await ref
+                        .read(audiobooksProvider.notifier)
+                        .deleteAudiobooks({audiobook.id});
                   }
                 },
               ),
@@ -90,19 +92,14 @@ class AudiobookTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return InkWell(
       onTap: () {
         if (audiobook.isFolder && !audiobook.isJoinedVolume) {
-          // Navigate to folder contents
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => FolderContentsScreen(
-                folderBook: audiobook,
-                audioService: audioService,
-                libraryManager: libraryManager,
-              ),
+              builder: (context) => FolderContentsScreen(folderBook: audiobook),
             ),
           );
         } else {
@@ -233,7 +230,7 @@ class AudiobookTile extends StatelessWidget {
                     color: Colors.grey[400],
                     size: 20,
                   ),
-                  onPressed: () => _showOptions(context),
+                  onPressed: () => _showOptions(context, ref),
                 )
               else
                 Checkbox(

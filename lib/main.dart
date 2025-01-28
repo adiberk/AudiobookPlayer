@@ -1,55 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 import 'screens/library_screen.dart';
-import 'services/library_manager.dart';
+import 'services/hive_storage_service.dart';
 import 'theme/app_theme.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // await Hive.deleteBoxFromDisk('audiobooks');
+  // Initialize Hive
+  await HiveStorageService().init();
+
+  // Clear existing data - remove this line after first run
+  // await Hive.deleteBoxFromDisk('audiobooks');
+
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final LibraryManager _libraryManager = LibraryManager();
-
-  @override
-  void dispose() {
-    _libraryManager.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'Audiobook Manager',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark, // This will follow the system theme
-      home: Scaffold(
-        body: LibraryScreen(libraryManager: _libraryManager),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.library_books),
-              label: 'Library',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
-        ),
+      themeMode: ThemeMode.dark,
+      home: const Scaffold(
+        body: LibraryScreen(),
+        bottomNavigationBar: _BottomNav(),
       ),
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  const _BottomNav();
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomNavigationBar(
+      currentIndex: 0,
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.library_books),
+          label: 'Library',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profile',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+      ],
     );
   }
 }

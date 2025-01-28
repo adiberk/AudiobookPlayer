@@ -1,62 +1,22 @@
 import 'package:flutter/material.dart';
-import '../models/audiobook.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../components/audiobook_tile.dart';
 import '../components/mini_player.dart';
-import '../screens/player_screen.dart';
-import '../services/library_manager.dart';
-import '../services/audio_service.dart';
-import '../utils/duration_formatter.dart';
+import '../models/audiobook.dart';
+import '../providers/providers.dart';
+import 'player_screen.dart';
 
-class LibraryScreen extends StatefulWidget {
-  final LibraryManager libraryManager;
-
-  const LibraryScreen({
-    Key? key,
-    required this.libraryManager,
-  }) : super(key: key);
+class LibraryScreen extends ConsumerStatefulWidget {
+  const LibraryScreen({super.key});
 
   @override
-  State<LibraryScreen> createState() => _LibraryScreenState();
+  ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
-  Audiobook? _currentAudiobook;
-  bool _isPlayerVisible = false;
-  final AudioService _audioService = AudioService();
+class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   bool _isSelectionMode = false;
   Set<String> _selectedBooks = {};
-  String _sortOption = 'title'; // Default sort option
-
-  @override
-  void dispose() {
-    _audioService.dispose();
-    super.dispose();
-  }
-
-  void _playSubfolderFile(Audiobook folderBook, Chapter chapter) {
-    final singleFileBook = Audiobook(
-      title: chapter.title,
-      author: folderBook.author,
-      duration: DurationFormatter.format(chapter.end - chapter.start),
-      path: chapter.filePath!,
-      coverImage: folderBook.coverImage,
-      chapters: [
-        Chapter(
-          title: chapter.title,
-          start: Duration.zero,
-          end: chapter.end - chapter.start,
-          filePath: chapter.filePath,
-        )
-      ],
-    );
-
-    setState(() {
-      _currentAudiobook = singleFileBook;
-      _isPlayerVisible = true;
-    });
-
-    _showPlayerScreen(context);
-  }
+  String _sortOption = 'title';
 
   void _toggleSelectionMode() {
     setState(() {
@@ -77,33 +37,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  Future<void> _deleteSelectedBooks() async {
-    if (_selectedBooks.isNotEmpty) {
-      final bool confirm = await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Delete Selected Books'),
-              content: Text(
-                  'Are you sure you want to delete ${_selectedBooks.length} selected books?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Delete'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-
-      if (confirm) {
-        await widget.libraryManager.deleteAudiobooks(_selectedBooks);
-        _toggleSelectionMode();
-      }
+  void _showPlayerScreen(BuildContext context, Audiobook audiobook) async {
+    // Don't stop playback, just set the audiobook if it's different
+    if (ref.read(currentAudiobookProvider) != audiobook) {
+      ref.read(currentAudiobookProvider.notifier).state = audiobook;
+      final audioService = ref.read(audioServiceProvider);
+      await audioService.setAudiobook(audiobook);
     }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => PlayerScreen(
+        onClose: () => Navigator.pop(context),
+      ),
+    );
   }
 
   void _showSortOptions() {
@@ -169,22 +119,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return audiobooks;
   }
 
-  void _showPlayerScreen(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => PlayerScreen(
-        audiobook: _currentAudiobook!,
-        audioService: _audioService,
-        onClose: () => Navigator.pop(context),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final audiobooks = ref.watch(audiobooksProvider);
+    final currentBook = ref.watch(currentAudiobookProvider);
+    final audioService = ref.watch(audioServiceProvider);
+
+    final sortedAudiobooks = _sortAudiobooks([...audiobooks]);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library'),
@@ -198,11 +140,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.add),
-              onSelected: (String choice) {
+              onSelected: (String choice) async {
                 if (choice == 'files') {
-                  widget.libraryManager.importFiles();
+                  final importService = ref.read(importServiceProvider);
+                  final books = await importService.importFiles();
+                  for (final book in books) {
+                    await ref
+                        .read(audiobooksProvider.notifier)
+                        .addAudiobook(book);
+                  }
                 } else if (choice == 'folder') {
-                  widget.libraryManager.importFolder();
+                  final importService = ref.read(importServiceProvider);
+                  final book = await importService.importFolder();
+                  if (book != null) {
+                    await ref
+                        .read(audiobooksProvider.notifier)
+                        .addAudiobook(book);
+                  }
                 }
               },
               itemBuilder: (BuildContext context) {
@@ -221,7 +175,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ] else ...[
             IconButton(
               icon: const Icon(Icons.delete),
-              onPressed: _selectedBooks.isEmpty ? null : _deleteSelectedBooks,
+              onPressed: _selectedBooks.isEmpty
+                  ? null
+                  : () => ref
+                      .read(audiobooksProvider.notifier)
+                      .deleteAudiobooks(_selectedBooks),
             ),
           ],
         ],
@@ -248,77 +206,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
               ),
               Expanded(
-                child: StreamBuilder<List<Audiobook>>(
-                  stream: widget.libraryManager.audiobooksStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text('Error: ${snapshot.error}'),
-                      );
-                    }
-
-                    if (!snapshot.hasData) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
-
-                    final audiobooks = _sortAudiobooks(snapshot.data!);
-
-                    if (audiobooks.isEmpty) {
-                      return const Center(
+                child: sortedAudiobooks.isEmpty
+                    ? const Center(
                         child: Text(
                             'No audiobooks found. Import some books to get started!'),
-                      );
-                    }
-
-                    return ListView.builder(
-                      itemCount: audiobooks.length,
-                      itemBuilder: (context, index) {
-                        final audiobook = audiobooks[index];
-                        return AudiobookTile(
-                          audiobook: audiobook,
-                          isSelected: _selectedBooks.contains(audiobook.id),
-                          selectionMode: _isSelectionMode,
-                          libraryManager: widget.libraryManager,
-                          audioService: _audioService,
-                          onTap: () {
-                            if (_isSelectionMode) {
-                              _toggleBookSelection(audiobook.id);
-                            } else {
-                              if (!(audiobook.isFolder &&
+                      )
+                    : ListView.builder(
+                        itemCount: sortedAudiobooks.length,
+                        padding: EdgeInsets.only(
+                            bottom: currentBook != null ? 60 : 0),
+                        itemBuilder: (context, index) {
+                          final audiobook = sortedAudiobooks[index];
+                          return AudiobookTile(
+                            audiobook: audiobook,
+                            isSelected: _selectedBooks.contains(audiobook.id),
+                            selectionMode: _isSelectionMode,
+                            onTap: () {
+                              if (_isSelectionMode) {
+                                _toggleBookSelection(audiobook.id);
+                              } else if (!(audiobook.isFolder &&
                                   !audiobook.isJoinedVolume)) {
-                                setState(() {
-                                  _currentAudiobook = audiobook;
-                                  _isPlayerVisible = true;
-                                });
-                                _showPlayerScreen(context);
+                                _showPlayerScreen(context, audiobook);
                               }
-                            }
-                          },
-                          onLongPress: () {
-                            if (!_isSelectionMode) {
-                              _toggleSelectionMode();
-                              _toggleBookSelection(audiobook.id);
-                            }
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
+                            },
+                            onLongPress: () {
+                              if (!_isSelectionMode) {
+                                _toggleSelectionMode();
+                                _toggleBookSelection(audiobook.id);
+                              }
+                            },
+                          );
+                        },
+                      ),
               ),
             ],
           ),
-          if (_isPlayerVisible && _currentAudiobook != null)
+          if (currentBook != null)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: MiniPlayer(
-                audiobook: _currentAudiobook!,
-                audioService: _audioService,
-                onTap: () => _showPlayerScreen(context),
+                audiobook: currentBook,
+                onTap: () => _showPlayerScreen(context, currentBook),
               ),
             ),
         ],

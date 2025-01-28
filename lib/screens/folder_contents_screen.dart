@@ -1,63 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/audiobook.dart';
-import '../services/audio_service.dart';
-import '../services/library_manager.dart';
 import '../components/mini_player.dart';
+import '../providers/providers.dart';
 import 'player_screen.dart';
 import '../utils/duration_formatter.dart';
 
-class FolderContentsScreen extends StatefulWidget {
+class FolderContentsScreen extends ConsumerStatefulWidget {
   final Audiobook folderBook;
-  final AudioService audioService;
-  final LibraryManager libraryManager;
 
   const FolderContentsScreen({
     Key? key,
     required this.folderBook,
-    required this.audioService,
-    required this.libraryManager,
   }) : super(key: key);
 
   @override
-  State<FolderContentsScreen> createState() => _FolderContentsScreenState();
+  ConsumerState<FolderContentsScreen> createState() =>
+      _FolderContentsScreenState();
 }
 
-class _FolderContentsScreenState extends State<FolderContentsScreen> {
-  Audiobook? _currentPlayingBook;
-  bool _isPlayerVisible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Check if there's currently playing audio
-    _checkCurrentlyPlaying();
-  }
-
-  void _checkCurrentlyPlaying() {
-    if (widget.audioService.isPlaying) {
-      setState(() {
-        _isPlayerVisible = true;
-        // Get the currently playing book from the audio service
-        _currentPlayingBook = widget.audioService.currentBook;
-      });
+class _FolderContentsScreenState extends ConsumerState<FolderContentsScreen> {
+  void _showPlayerScreen(Audiobook book) async {
+    // Only stop and reinitialize if it's a different book
+    if (ref.read(currentAudiobookProvider)?.id != book.id) {
+      final audioService = ref.read(audioServiceProvider);
+      await audioService.pause();
+      ref.read(currentAudiobookProvider.notifier).state = book;
+      await audioService.setAudiobook(book);
     }
-  }
 
-  void _showPlayerScreen(Audiobook book) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       isDismissible: true,
       backgroundColor: Colors.transparent,
       builder: (context) => PlayerScreen(
-        audiobook: book,
-        audioService: widget.audioService,
         onClose: () {
           Navigator.pop(context);
-          setState(() {
-            _isPlayerVisible = true;
-            _currentPlayingBook = book;
-          });
         },
       ),
     );
@@ -65,6 +44,8 @@ class _FolderContentsScreenState extends State<FolderContentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentBook = ref.watch(currentAudiobookProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.folderBook.title),
@@ -72,7 +53,7 @@ class _FolderContentsScreenState extends State<FolderContentsScreen> {
       body: Stack(
         children: [
           ListView.builder(
-            padding: EdgeInsets.only(bottom: _isPlayerVisible ? 60 : 0),
+            padding: EdgeInsets.only(bottom: currentBook != null ? 60 : 0),
             itemCount: widget.folderBook.chapters.length,
             itemBuilder: (context, index) {
               final chapter = widget.folderBook.chapters[index];
@@ -108,36 +89,22 @@ class _FolderContentsScreenState extends State<FolderContentsScreen> {
                     ],
                   );
 
-                  setState(() {
-                    _currentPlayingBook = singleFileBook;
-                    _isPlayerVisible = false;
-                  });
-
                   _showPlayerScreen(singleFileBook);
                 },
               );
             },
           ),
-          if (_isPlayerVisible && _currentPlayingBook != null)
+          if (currentBook != null)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: MiniPlayer(
-                audiobook: _currentPlayingBook!,
-                audioService: widget.audioService,
-                onTap: () => _showPlayerScreen(_currentPlayingBook!),
+                audiobook: currentBook,
+                onTap: () => _showPlayerScreen(currentBook),
               ),
             ),
         ],
-      ),
-      bottomNavigationBar: Container(
-        height:
-            kBottomNavigationBarHeight, // Standard height for a BottomNavigationBar
-        color: Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
-            Theme.of(context)
-                .colorScheme
-                .surface, // Fallback to theme surface color
       ),
     );
   }

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/audiobook.dart';
-import '../services/audio_service.dart';
+import '../providers/providers.dart';
 import '../utils/duration_formatter.dart';
 
-class ChaptersList extends StatelessWidget {
+class ChaptersList extends ConsumerWidget {
   final List<Chapter> chapters;
-  final AudioService audioService;
   final Chapter currentChapter;
 
   const ChaptersList({
     Key? key,
     required this.chapters,
-    required this.audioService,
     required this.currentChapter,
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final audioService = ref.watch(audioServiceProvider);
+
     return ListView.builder(
       itemCount: chapters.length,
       itemBuilder: (context, index) {
@@ -31,6 +31,7 @@ class ChaptersList extends StatelessWidget {
           leading: Text('${index + 1}'),
           onTap: () async {
             await audioService.seek(chapter.start);
+            ref.read(currentChapterIndexProvider.notifier).state = index;
           },
         );
       },
